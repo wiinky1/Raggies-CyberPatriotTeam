@@ -4,7 +4,7 @@
 **Round:** Introductory Round & Round 2 (Season 19)
 **Date:** 2026-11-14
 **Scenario:** Arc Foundry & Aerospace (AFA) — newly acquired avionics lab
-**Result:** Debian 12 = **87 / 100** · Windows Server 2022 = **65 / 100**
+**Result:** Debian 12 = **87 / 100** · Windows Server 2022 = **65 / 100** · Windows 11 = **43 / 100** (CCS **195** · Cisco Quiz **10.00** · Cisco PT **5.71** · Adjust **−75.00**)
 
 > Legend: ✅ scored · ❌ not scored · ⚠️ learned the hard way.
 > Passwords are **not** restated here (see the per-image README in `Readmes/`) — only *which account* was affected.
@@ -131,7 +131,27 @@ We did **not capture the failing-checks list** for the Windows image (no scoring
 - [ ] **Windows:** build `harden-win2022.ps1` covering IIS directory-browsing off, Handbook share ACLs (admins write / everyone read), Chrome + Notepad++/WinSCP/7-Zip updates, Action Center, `ccsclient.exe` allow-list.
 - [ ] **Screenshot the scoring report on BOTH images** before suspending, next time.
 - [ ] Populate the currently-empty `2026_Scripts/Round 2/{Linux,Windows}` folders with reproducible tooling.
+- [ ] **Windows 11 (43/100, 2 penalties — our weakest image):** capture the scoring-report failure breakdown before the images are deleted, then build `harden-win11.ps1` for the AFA R2 image (Chrome default, keep business apps, Action Center, roster/password targets per the live README).
+- [ ] **Investigate the −75.00 team Adjust** (results email / national team) before Round 3 — reason not yet confirmed.
 
 ---
 
-*Documented 2026-11-14 from the Season 19 Round 2 run. Passwords intentionally omitted — see `Readmes/`.*
+## 9. Official results — CAP dashboard (reviewed 2026-11-21)
+
+Team **#19-3483** · TX · CAP · High School tier.
+
+| Image (dashboard) | Submitted at | Found | Remaining | Pen | Score |
+|---|---|---|---|---|---|
+| Debian 12 (`cp19_intro_r2`) | 02:40:14 | 16 | 3 | 0 | **87** |
+| Windows Server 2022 | 03:24:59 | 14 | 9 | 0 | **65** |
+| Windows 11 (`cp19_intro_r2`) | 03:41:28 | 10 | 9 | **2** | **43** |
+
+**Totals:** CCS Score **195** · Cisco Quiz **10.00** · Cisco PT **5.71** · **Adjust −75.00** (reason not yet confirmed — see action items).
+
+- Submission order: Debian → WS 2022 → Win 11; timestamps are cumulative within the 03:41:28 round.
+- **Windows 11 is the weakest image (43)** and the only one with penalties recorded (2). A per-check failure breakdown needs the Win11 scoring report — the images must be captured **before they're deleted** per the rules book.
+- Debian's "3 remaining" checks match section 3 above (faillock, min password age, one unpinned check).
+
+---
+
+*Documented 2026-11-14 from the Season 19 Round 2 run; official dashboard results added 2026-11-21. Passwords intentionally omitted — see `Readmes/`.*
