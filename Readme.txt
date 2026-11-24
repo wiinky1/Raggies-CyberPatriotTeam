@@ -1,25 +1,11 @@
-# CP19 Master Scripts — CyberPatriot Remediation (TRAINING IMAGES ONLY)
+# CP Master Scripts — CyberPatriot Hardening & Remediation
 
-> ## ⚠️ RULES COMPLIANCE — READ FIRST
-> **These scripts are for PRACTICE on TRAINING images only. They are NOT for use in any scored competition round.**
+> ## ⚖️ OPEN SOURCE — NO AFFILIATION
+> These scripts are **purely open source**. They are **not affiliated with, endorsed by, or connected to any CyberPatriot team, any CAP squadron — including TX295 Composite Squadron — or the competition itself.**
 >
-> NICEC rules that govern this repo (CP19 context):
+> If a team number, squadron name, or squadron folder shows up anywhere (file names, commit history, local folders), that's a historical leftover from where the work was originally done. It carries **no meaning, no sponsorship, and no association** with any team or squadron. The scripts stand on their own.
 >
-> - **3010.4.A.2** — You may not connect any AI tool or agent to a competition image or system, directly or indirectly (SSH, APIs, MCP, automation, screen capture…).
-> - **3010.4.A.3** — You may not submit/paste/upload competition or challenge material to an AI tool.
-> - **3010.4.B** — You may not use competition materials to train/test/develop AI systems.
-> - **3010.4.C** — You may not install, execute, or invoke any AI tool, script, or agent **within** a competition image.
-> - **3010.4.D** — You may not use AI tools to generate scripts, commands, or answers for use in the competition.
-> - **3011.4** — Scripts used during a round must be created **by the competitors themselves**.
-> - **3011.1** — Competitors may consult free public resources during the round.
-> - **3009** — Current or past competition images are **not** training material, even after answers are published; scenario text, rosters, and answer keys may not be used to build training content.
->
-> **Practical consequences:**
-> 1. These scripts may only be run against **training** images (e.g., CP19 Round 2's public training image).
-> 2. During a real round you perform the same work **by hand**, using your own notes and free public resources — you may not run, reference, or paste these scripts (or their output) into or from a competition image.
-> 3. **This repo is public on purpose.** The profile data comes from the *publicly released* training image and its published answers — it is shared as a learning aid for anyone practicing CyberPatriot-style hardening. It contains no scored-round material.
->
-> ---
+> **Use them freely** — read them, copy them, modify them, share them, build on them. What you do with them and how you do it is on you.
 
 ## What this is
 
@@ -27,17 +13,17 @@ A single-engine, **profile-driven** pair of master remediation/hardening scripts
 
 | File | OS / Profile | Stages |
 |---|---|---|
-| `cp_master.sh` | Debian 12, Mint 21 (auto-detect + `PROFILE` env override) | `fix` (default), `audit`, `verify`, `forensics`, `fixall` |
-| `cp_master_win.ps1` | Windows 11 — CP19 Round 2 training image (`Win11_TR2`) | `fix` (default), `audit`, `verify`, `forensics`, `fixall` |
+| `cp_master.sh` | Debian 12, Mint 21 (auto-detect + `PROFILE` env override) | `audit`, `forensics`, `fix`, `verify` |
+| `cp_master_win.ps1` | Windows 11 — training image (`Win11_TR2`) | `audit`, `fix`, `verify`, `forensics` |
 
 Design goals:
 
-- **One engine per OS, profile = data.** All per-round targets (password policy numbers, file permissions, service names, expected users, Notepad++ target version, …) live in a profile block at the top of each script. A new training round = a new profile block, not a new script.
+- **One engine per OS, profile = data.** All per-round targets (password policy numbers, file permissions, service names, expected users, Notepad++ target version, …) live in a profile block at the top of each script. A new round = a new profile block, not a new script.
 - **Four stages, separate concerns.**
   - `audit` — read-only check table (expected / actual / pass-fail per scored item). Safe to run any time.
-  - `fix` — applies every remediation, idempotent, safe to re-run.
+  - `fix` — applies remediations, idempotent, safe to re-run.
   - `verify` — re-audits after fixes; reports what still fails.
-  - `forensics` — decodes the Forensics Question files (e.g., ROT13 → reverse-text pipeline) and prints the workflow to follow by hand.
+  - `forensics` — decodes the Forensics Question files (e.g., ROT13 → reverse-text pipeline) and prints the workflow to follow.
 - **Safety guards are hard-coded, not configurable.** No stage will ever:
   - stop/disable/kill the **CCS Client**,
   - change **chowe's** password,
@@ -45,15 +31,103 @@ Design goals:
   - change the **time zone**,
   - uninstall **Chrome** or **Notepad++** (penalty-guarded apps).
 
+## How the repository is organized
+
+**Year → Round → Operating System.**
+
+1. **Year** — `2026_Scripts/` holds everything for the 2026 competition year. When the next year starts, a new year folder (`2027_Scripts/`) is created the same way.
+2. **Round** — inside a year folder, there is one folder per round (`Training Round 1`, `Training Round 2`, `Practice Round`, `Round 2`, `State Round`, …). Each round folder holds the scripts written for that specific round.
+3. **Operating system** — inside each round folder, the scripts are split into `Linux/` and `Windows/` subfolders, since every round has a Linux image and a Windows image.
+
+So to find a script: **year folder → round folder → OS folder → the script.**
+
+This file (`Readme.txt` at the repo root) is the **single main readme** for the whole repository. `Old_Scripts/Readme.txt` is a legacy note for that folder only.
+
+## File tree
+
+```
+TX295-CyberPatriotTeam/
+├── Readme.txt                          # this file — the single main readme
+│
+├── 2026_Scripts/                       # ← the 2026 competition year
+│   ├── Training Round 1/
+│   │   ├── Linux/
+│   │   │   └── V1.sh
+│   │   └── Windows/                    (empty — scripts go here as the round is worked)
+│   │
+│   ├── Training Round 2/
+│   │   ├── Linux/
+│   │   │   ├── cap_hardening_2026.sh
+│   │   │   ├── Harden_v6.sh
+│   │   │   ├── Harden_v7.sh
+│   │   │   ├── harden-debian12.sh
+│   │   │   ├── round_config.txt
+│   │   │   └── Screenshot 2026-11-11 114317.png
+│   │   └── Windows/                    (empty)
+│   │
+│   ├── Practice Round/
+│   │   ├── Linux/
+│   │   │   └── V1.sh
+│   │   └── Windows/                    (empty)
+│   │
+│   ├── Round 2/
+│   │   ├── Linux/                      (empty)
+│   │   └── Windows/                    (empty)
+│   │
+│   └── State Round/                    # the master engine (the "real" scripts)
+│       ├── Linux/
+│       │   └── cp_master.sh            # Debian 12 + Mint 21 engine
+│       └── Windows/
+│           └── cp_master_win.ps1       # Windows 11 TR2 engine
+│
+├── CIS benchmarks/                     # reference material (PDFs)
+│   ├── CIS_Debian_Linux_12_Benchmark_v2.0.0.pdf
+│   ├── CIS_Linux_Mint_22_Benchmark_v1.0.0.pdf
+│   ├── CIS_Ubuntu_Linux_20.04_LTS_Benchmark_v3.0.0.pdf
+│   ├── CIS_Ubuntu_Linux_20.04_LTS_STIG_Benchmark_v2.0.0.pdf
+│   └── CIS_Ubuntu_Linux_22.04_LTS_Benchmark_v3.0.0.pdf
+│
+├── Old_Scripts/                        # earlier one-off scripts (kept for history)
+│   ├── Good_script.sh
+│   ├── Harden.sh
+│   ├── Harden_v2.sh
+│   ├── Harden_v3.sh
+│   ├── Harden_v4.sh
+│   ├── Home_brew_V5.sh
+│   ├── cyberpatriot_user_manager.sh
+│   ├── Run_after_forensic.sh
+│   ├── Test.sh
+│   ├── test_from_ai.sh
+│   └── Readme.txt                      # legacy folder note (not the main readme)
+│
+└── Readmes/                            # round README pages + answer keys
+    ├── Answer_Keys/
+    │   ├── CP-18 Round 2 Answers and Vulnerabilities.pdf
+    │   ├── CP18_Ubuntu22_Training_Answer_Key.pdf
+    │   ├── CP19_Debian12_Training_Answer_Key.pdf
+    │   ├── CP19_Mint21_Practice_Answer_Key.pdf
+    │   ├── CP19_Mint21_Training_Answer_Key.pdf
+    │   ├── CP19_Mint21_Training2_Answer_Key.pdf
+    │   └── CP19_Win11_Training_Answer_Key.pdf
+    ├── CyberPatriot Introductory Round & Round 2 Debian 12 README – CyberPatriot.html
+    │   └── …_files/                    (saved web assets for the HTML page)
+    ├── CyberPatriot Introductory Round & Round 2 Windows 11 README – CyberPatriot.html
+    │   └── …_files/                    (saved web assets for the HTML page)
+    ├── CyberPatriot Round 2 Windows Server 2022 README – CyberPatriot.html
+    │   └── …_files/                    (saved web assets for the HTML page)
+    └── Training Round 2 Debian 12 README – CyberPatriot.html
+        └── …_files/                    (saved web assets for the HTML page)
+```
+
 ## Usage
 
 ### Windows (PowerShell 5.1 compatible — Windows PowerShell or pwsh)
 
 ```powershell
-# read-only audit table
+# read-only audit table (default stage)
 powershell -ExecutionPolicy Bypass -File .\cp_master_win.ps1 -Profile Win11_TR2 -Stage audit
 
-# apply script-scope fixes, then print the student homework list (default stage)
+# apply fixes
 powershell -ExecutionPolicy Bypass -File .\cp_master_win.ps1 -Profile Win11_TR2 -Stage fix
 
 # re-check
@@ -65,92 +139,29 @@ powershell -ExecutionPolicy Bypass -File .\cp_master_win.ps1 -Profile Win11_TR2 
 
 Exit codes: `audit`/`verify` exit 0 on success even if items fail (a report is not an error); `fix` exits 0 when complete, 1 if a fatal guard or exception interrupted it.
 
-### Linux (Debian 12 / Mint 21 training images)
+### Linux (Debian 12 / Mint 21 images)
 
 ```bash
-# apply script-scope fixes, then print the student homework list (default stage)
-./cp_master.sh
-
-# or stage explicitly:
+# stage = first positional arg (default: audit); profile auto-detected, overridable
 ./cp_master.sh audit
 PROFILE=debian12 ./cp_master.sh fix
 ./cp_master.sh verify
 ./cp_master.sh forensics
-./cp_master.sh fixall     # TRAINING ONLY — script does everything incl. passwords
 ```
 
 Env overrides: `PROFILE` (auto | explicit), `AUTO_WRITE_ANSWERS` (0/1), `SUDO_PASS_FILE` (default `/tmp/.cp_sudo_pass`).
 
-> **Do not run any of the above inside a competition image.** Run it on the training image to *learn the sequence and the exact values*, then do it by hand during the round.
-
 ## Scope per profile
 
-- **`Win11_TR2`** — 32 scored items + 3 penalty checks from the CP19 Round 2 training image answer key, all mapped 1:1 to profile data and consumed by the stage functions (registry-backed policy items, password/lockout policy, service state, firewall, users/groups, Notepad++ version, Chrome presence, …).
+- **`Win11_TR2`** — 32 scored items + 3 penalty checks, all mapped 1:1 to profile data and consumed by the stage functions (registry-backed policy items, password/lockout policy, service state, firewall, users/groups, Notepad++ version, Chrome presence, …).
 - **Debian 12 / Mint 21** — CIS-baseline families (sshd, sysctl, PAM password controls incl. `pam_unix remember`, shadow/file permissions 640, ASLR, `ip_forward`, syncookies, grub.cfg, ufw, unattended-upgrades) with profile-specific targets.
-- **Windows Server 2022 — deliberately excluded.** Selecting it raises a FATAL error guard: WS 2022 images are competition images and must not be scripted against (3009/3010.4). The profile is intentionally not implemented.
+- **Windows Server 2022 — deliberately not implemented.** It's a scored-round image, so there's nothing to train against; the profile is intentionally left out.
 
-## Verification status (2026-11-24)
-
-- `cp_master_win.ps1` — **full-file parse: OK (0 errors)** on Windows PowerShell 5.1 (`[Parser]::ParseFile`) after all fixes.
-- Profile data cross-check — **32/32 scored items + 3 penalties** mapped to profile keys and consumed by stage functions.
-- Forensics helpers — `Rot13` + `Reverse-Text` round-trip verified against the answer-key flow: file content `lnj ehbl ab ren hbL` → ROT13 → `yaw ruoy no era uoY` → reverse → `You are on your way`.
-- Notepad++ version comparison — numeric `[Version]` compare verified: `8.9.10` is correctly judged **not older** than `8.9.8.1` (string comparison got this wrong).
-- `cp_master.sh` — syntax-checked (`bash -n`); stage dispatch and profile auto-detect verified.
-
-Known limitations:
-
-- `fix` does not auto-install Chrome/Notepad++ (penalty-guarded); it surfaces a manual-update note for Notepad++ when below target (needs internet + installer).
-- Version compare falls back to exact string match if a reported version isn't a valid `[Version]` (e.g., "8.6.8 build 4012").
-- Runtime behavior on a live training image is the final proof — run `audit` → `fix` → `verify` on the training image before trusting the mapping.
-
-## How the team uses it (the 55 → 95 workflow)
-
-The scripts are deliberately **not** a "do everything" cheat. They cover the
-scriptable half of the scorecard, and the human does the rest:
-
-1. **Pull the scripts** from this repo onto the training VM (USB or paste).
-2. **`fix` (default stage)** — the script does the *script scope*:
-   GPO/security options (blank password, last-logged-in user, enumerate admins),
-   firewall, RDP, service states, shares, software versions, backdoors, updates.
-   On the Win11 TR2 image this lands you at **roughly 55% of the scored points**.
-3. **The student does the human scope BY HAND** — the script prints the exact
-   list at the end of `fix`, with GUI paths and the equivalent PowerShell:
-   - all **passwords** (set strong, replace insecure),
-   - all **user/group changes** (remove bad user, demote admins, create the group),
-   - **user-rights assignment** (strip audit + take-ownership from the named accounts),
-   - the **forensics questions** (`forensics` stage prints the decode chain).
-4. **`verify`** — re-checks every item; with the human work done you should be
-   at **~95+** (the remaining gap is GUI-only items a script can't touch).
-5. **`fixall` (TRAINING ONLY)** — the script also performs the password and
-   user changes, to measure what a full-score image looks like.
-   **Never** use it as a substitute for the human scope in real practice.
-
-The point of the split: running the script should *teach* the exact sequence
-and values — then the student reproduces the human scope by hand during the
-actual round (3011.4: round scripts must be written by the competitors).
-
-## Reproducing a round by hand (the actual competition workflow)
+## Reproducing a round by hand (how people actually use this)
 
 1. **Audit first.** Read every scored requirement from the round's readme; confirm the current state of each item (the scripts' `audit` stage shows exactly which commands/registry keys to check).
 2. **Fix in order of risk.** Password policy, users/groups, services, firewall, then file permissions — the `fix` stage's ordering is the suggested sequence.
 3. **Verify.** Re-check every item after fixes; leave evidence (screenshots of each check).
 4. **Forensics last.** Work the decode chain in a text editor (the `forensics` stage prints the chain and the expected workflow).
 
-## Files
-
-```
-2026_Scripts/
-├── Practice Round/
-│   └── Linux/V1.sh
-├── State Round/                 # the master scripts
-│   ├── Linux/cp_master.sh       # Debian 12 + Mint 21 engine
-│   └── Windows/cp_master_win.ps1 # Windows 11 TR2 engine
-├── Training Round 1/
-│   └── Linux/V1.sh
-└── Training Round 2/
-    └── Linux/                   # earlier per-round scripts
-```
-
-Each round folder gets its own copy; the master engine is the same file — a new round is a new profile block, not a new script.
-
-*Built as a learning aid for CyberPatriot training. Not affiliated with or endorsed by NICE. Public repo — share it. Never use in scored rounds.*
+*Open source — use, modify, and share freely. Not affiliated with any CyberPatriot team, CAP squadron, or the competition. No warranty of any kind; you are responsible for how you use these.*
