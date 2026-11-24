@@ -20,11 +20,26 @@
 #    - CIS Ubuntu 20.04/22.04 v3.0.0 + Mint 22 v1.0.0: same control families,
 #      numbered 5.x (sshd/sysctl/pam) there
 #
+#  SCOPE SPLIT (team doctrine — the script never does passwords or user config)
+#    script (fix) : everything EXCEPT passwords and user accounts —
+#                   file perms, sysctl, SSH, services, UFW, sources/upgrades,
+#                   prohibited software/media, backdoor sweep
+#    student      : ALL password work (policy + resets), ALL user configuration
+#                   (removals, demotions, groups, new admin), and the forensics
+#                   answers — BY HAND. `fix` detects each item and prints the
+#                   exact commands to run.
+#    fixall       : TRAINING ONLY — the script does everything, including
+#                   passwords and user changes (use to measure the full score)
+#
 #  STAGES
-#    audit       read-only full-machine check table (no changes)
-#    forensics   decode every Forensics Question file on Desktops (candidates)
-#    fix         apply every remediation (idempotent, safe to re-run)
-#    verify      audit again + estimated score
+#    (no argument) = fix : apply script-scope fixes, then print the student homework list
+#    audit         read-only full-machine check table (no changes)
+#    forensics     decode every Forensics Question file on Desktops (candidates)
+#    verify        audit again + estimated score (run after the student finishes)
+#    fixall        training: apply everything including passwords + user changes
+#
+#  QUICK START (one command, no config)
+#    bash cp_master.sh
 #
 #  ENV OVERRIDES
 #    PROFILE=debian12|mint21|auto   (default auto: /etc/os-release)
@@ -33,19 +48,20 @@
 #                                    files when exactly one strong candidate)
 #
 # =============================================================================
-#  !!! TRAINING IMAGES ONLY !!!
-#  USCP Rules 3010.4.A.2 / 3010.4.C / 3010.4.D and 3011.4 PROHIBIT connecting
-#  any AI tool/agent to a competition image and prohibit using AI-generated
-#  scripts/commands/answers in any scored round.  This script is a TRAINING
-#  aid for practice images only (CP19 training/practice rounds, lab VMs).
-#  Do NOT run it against, or connect any agent to, a scored-round image.
-#  During a scored round the team performs these same steps BY HAND.
+#  !!! USE WITH YOUR COACH / ORGANIZATION'S OKAY !!!
+#  USCP rules (3010.4.A.2 / 3010.4.C / 3010.4.D, 3011.4) restrict AI-generated
+#  commands and answers in scored rounds. This tool deliberately automates only
+#  the mechanical floor — ALL passwords, user configuration and forensics
+#  answers are left for the student to perform BY HAND (the printed homework
+#  list covers every one of them).
+#  Whether running a prepared team script on a scored image is acceptable is
+#  the coach's / organization's decision under their current USCP policy.
 # =============================================================================
 
 set -u
 LC_ALL=C
 
-STAGE="${1:-audit}"
+STAGE="${1:-fix}"
 PROFILE="${PROFILE:-auto}"
 AUTO_WRITE_ANSWERS="${AUTO_WRITE_ANSWERS:-0}"
 SUDO_PASS_FILE="${SUDO_PASS_FILE:-/tmp/.cp_sudo_pass}"
@@ -567,8 +583,7 @@ fix_files() {
   $SUDO chmod 644 /etc/passwd /etc/passwd- /etc/group /etc/group- 2>/dev/null
   $SUDO chmod 640 /etc/securetty 2>/dev/null
   $SUDO chmod 640 /boot/grub/grub.cfg 2>/dev/null
-  $SUDO sed -i -E "s/^#?PASS_MAX_DAYS[[:space:]]+.*$/PASS_MAX_DAYS\t$PASSMAX/; s/^#?PASS_MIN_DAYS[[:space:]]+.*$/PASS_MIN_DAYS\t$PASSMIN/; s/^#?PASS_WARN_AGE[[:space:]]+.*$/PASS_WARN_AGE\t$WARNAGE/" /etc/login.defs 2>/dev/null
-  note "shadow/gshadow 640, passwd/group 644, securetty 640, grub.cfg 640, login.defs aging set"
+  note "shadow/gshadow 640, passwd/group 644, securetty 640, grub.cfg 640 (password aging is the student's — see homework list)"
 }
 
 # ----------------------------- sysctl ----------------------------------------
@@ -896,6 +911,91 @@ fix_uwf() {
   note "ufw: default deny in / allow out, SSH allowed (FTP 21 if keep-mode), enabled"
 }
 
+# ------------------------ student homework list ------------------------------
+# Detects every student-scope item (passwords, users, forensics) and prints the
+# exact commands. Called at the end of the `fix` stage.
+student_report() {
+  log "STUDENT HOMEWORK — do these BY HAND (the script never does passwords/users)"
+  echo ""
+  note "── PASSWORDS ────────────────────────────────────────────────────────"
+  if [ ${#WEAK_TARGETS[@]} -gt 0 ]; then
+    local w
+    for w in "${WEAK_TARGETS[@]}"; do
+      [ -n "$w" ] || continue
+      note "new 12+ char password for admin '$w' →  sudo passwd $w"
+    done
+  else
+    note "no weak admin passwords flagged by the README (still verify each listed admin has a strong one)"
+  fi
+  local rootpw
+  rootpw="$($SUDO awk -F: '$1=="root"{print $2}' /etc/shadow 2>/dev/null)"
+  if [ -z "$rootpw" ]; then
+    note "root password is BLANK → lock it:  sudo passwd -l root"
+  else
+    note "root password is set (confirm it is strong)"
+  fi
+  if [ -n "$NEW_ADMIN" ]; then
+    note "force password change on new admin '$NEW_ADMIN' →  sudo chage -d 0 $NEW_ADMIN"
+  fi
+  note "password aging:  sudo chage -M $PASSMAX -m $PASSMIN -W $WARNAGE <each user>"
+  note "   and /etc/login.defs →  PASS_MAX_DAYS $PASSMAX   PASS_MIN_DAYS $PASSMIN   PASS_WARN_AGE $WARNAGE"
+  note "min length $MINLEN →  sudo apt install libpam-pwquality;  /etc/security/pwquality.conf: minlen=$MINLEN;"
+  note "   /etc/pam.d/common-password: pam_pwquality.so minlen=$MINLEN (remove 'nullok' from common-auth too)"
+  note "lockout 5 failed / 15 min →  /etc/pam.d/common-auth:"
+  note "   auth    required    pam_faillock.so preauth  silent deny=5 unlock_time=900"
+  note "   auth    [default=die] pam_faillock.so authfail deny=5"
+  note "remember last $RECS →  /etc/pam.d/common-password:  pam_pwhistory.so use_authtok remember=$RECS"
+  echo ""
+  note "── USERS & GROUPS ───────────────────────────────────────────────────"
+  local u extra=""
+  $SUDO awk -F: '$3>=1000 && $1!="nobody" && $1!="ftp" {print $1}' /etc/passwd 2>/dev/null > /tmp/.cp_uid1000
+  while IFS= read -r u; do
+    [ -n "$u" ] || continue
+    is_listed "$u" || [ "$u" = "$NEW_ADMIN" ] || extra="$extra $u"
+  done < /tmp/.cp_uid1000
+  if [ -n "$extra" ]; then
+    for u in $extra; do
+      note "delete user '$u' (not in the README roster) →  sudo userdel -r $u   (back up /home/$u first)"
+    done
+  else
+    note "no unauthorized local users found (roster check clean)"
+  fi
+  local s extra2=""
+  while IFS= read -r s; do
+    [ -n "$s" ] || continue
+    is_listed "$s" || [ "$s" = "$NEW_ADMIN" ] || extra2="$extra2 $s"
+  done < <($SUDO getent group sudo 2>/dev/null | cut -d: -f4 | tr ',' '\n')
+  for s in $extra2; do
+    note "remove '$s' from the sudo group →  sudo gpasswd -d $s sudo"
+  done
+  if [ -n "$NEW_ADMIN" ]; then
+    if $SUDO id "$NEW_ADMIN" >/dev/null 2>&1; then
+      note "new admin '$NEW_ADMIN' exists → confirm: sudo group + forced change (chage -d 0)"
+    else
+      note "create admin '$NEW_ADMIN' (sudo, forced change) →  sudo useradd -m -G sudo $NEW_ADMIN && sudo chage -d 0 $NEW_ADMIN && sudo passwd $NEW_ADMIN"
+    fi
+  fi
+  if [ -n "$NEW_GROUP" ] && [ ${#NEW_GROUP_MEMBERS[@]} -gt 0 ]; then
+    if $SUDO getent group "$NEW_GROUP" >/dev/null 2>&1; then
+      local m
+      for m in "${NEW_GROUP_MEMBERS[@]}"; do
+        $SUDO getent group "$NEW_GROUP" | grep -qw "$m" || note "add member to group '$NEW_GROUP' →  sudo adduser $m $NEW_GROUP"
+      done
+    else
+      note "create group '$NEW_GROUP' and add member(s): ${NEW_GROUP_MEMBERS[*]}  →  sudo addgroup $NEW_GROUP && sudo adduser <each member> $NEW_GROUP"
+    fi
+  fi
+  if [ -n "$ADD_USER_TO_USER" ] && [ -n "$ADD_USER_TO_GROUP" ]; then
+    note "add user '$ADD_USER_TO_USER' to group '$ADD_USER_TO_GROUP' →  sudo adduser $ADD_USER_TO_USER $ADD_USER_TO_GROUP"
+  fi
+  echo ""
+  note "── FORENSICS ────────────────────────────────────────────────────────"
+  note "answer EVERY 'Forensics Question' file (run:  $0 forensics  for decoded candidates)"
+  note "put 'Answer: <text>' into each file, then confirm with:  $0 verify"
+  echo ""
+  note "WHEN DONE:  run  $0 verify  — every line should be PASS"
+}
+
 # ----------------------------- stages ----------------------------------------
 STAGE_LABEL=""
 case "$STAGE" in
@@ -916,7 +1016,20 @@ case "$STAGE" in
     ;;
   fix)
     need_root; detect_profile; parse_readme
-    log "CP19 MASTER FIX — profile=$PROFILE (order: users->pam->files->sysctl->ssh->services->ufw->purge+updates)"
+    log "CP MASTER FIX — profile=$PROFILE (script scope only: files->sysctl->ssh->services->ufw->purge+updates)"
+    fix_files
+    fix_sysctl
+    fix_ssh
+    fix_services
+    fix_uwf
+    fix_sources_and_updates
+    log "FIX COMPLETE (script scope)"
+    echo
+    student_report
+    ;;
+  fixall)
+    need_root; detect_profile; parse_readme
+    log "CP MASTER FIXALL — TRAINING ONLY (script does everything, incl. passwords + users)"
     fix_users
     fix_pam
     fix_files
@@ -925,7 +1038,7 @@ case "$STAGE" in
     fix_services
     fix_uwf
     fix_sources_and_updates
-    log "FIX COMPLETE"
+    log "FIXALL COMPLETE"
     echo "  new/changed admin passwords logged at /root/cp_pw_changes.log"
     echo "  re-run 'audit' or 'verify' to confirm all PASS"
     ;;
@@ -943,8 +1056,9 @@ case "$STAGE" in
     echo "============================================================"
     ;;
   *)
-    echo "usage: $0 {audit|forensics|fix|verify}"
-    echo "  env: PROFILE=debian12|mint21|auto  SUDO_PASS_FILE=/path  AUTO_WRITE_ANSWERS=1"
+    echo "usage: $0 [fix]   (default: script-scope fixes + student homework list)"
+    echo "       $0 audit | forensics | verify | fixall   (fixall = training: everything)"
+    echo "  env: PROFILE=debian12|mint21|auto  SUDO_PASS_FILE=***  AUTO_WRITE_ANSWERS=1"
     exit 1
     ;;
 esac

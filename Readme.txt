@@ -17,7 +17,7 @@
 > **Practical consequences:**
 > 1. These scripts may only be run against **training** images (e.g., CP19 Round 2's public training image).
 > 2. During a real round you perform the same work **by hand**, using your own notes and free public resources — you may not run, reference, or paste these scripts (or their output) into or from a competition image.
-> 3. **Keep this repository PRIVATE.** It embeds the training image's target values and answer-key references; publishing it publicly would distribute answer-key material.
+> 3. **This repo is public on purpose.** The profile data comes from the *publicly released* training image and its published answers — it is shared as a learning aid for anyone practicing CyberPatriot-style hardening. It contains no scored-round material.
 >
 > ---
 
@@ -27,8 +27,8 @@ A single-engine, **profile-driven** pair of master remediation/hardening scripts
 
 | File | OS / Profile | Stages |
 |---|---|---|
-| `cp_master.sh` | Debian 12, Mint 21 (auto-detect + `PROFILE` env override) | `audit`, `forensics`, `fix`, `verify` |
-| `cp_master_win.ps1` | Windows 11 — CP19 Round 2 training image (`Win11_TR2`) | `audit`, `fix`, `verify`, `forensics` |
+| `cp_master.sh` | Debian 12, Mint 21 (auto-detect + `PROFILE` env override) | `fix` (default), `audit`, `verify`, `forensics`, `fixall` |
+| `cp_master_win.ps1` | Windows 11 — CP19 Round 2 training image (`Win11_TR2`) | `fix` (default), `audit`, `verify`, `forensics`, `fixall` |
 
 Design goals:
 
@@ -50,10 +50,10 @@ Design goals:
 ### Windows (PowerShell 5.1 compatible — Windows PowerShell or pwsh)
 
 ```powershell
-# read-only audit table (default stage)
+# read-only audit table
 powershell -ExecutionPolicy Bypass -File .\cp_master_win.ps1 -Profile Win11_TR2 -Stage audit
 
-# apply fixes
+# apply script-scope fixes, then print the student homework list (default stage)
 powershell -ExecutionPolicy Bypass -File .\cp_master_win.ps1 -Profile Win11_TR2 -Stage fix
 
 # re-check
@@ -68,11 +68,15 @@ Exit codes: `audit`/`verify` exit 0 on success even if items fail (a report is n
 ### Linux (Debian 12 / Mint 21 training images)
 
 ```bash
-# stage = first positional arg (default: audit); profile auto-detected, overridable
+# apply script-scope fixes, then print the student homework list (default stage)
+./cp_master.sh
+
+# or stage explicitly:
 ./cp_master.sh audit
 PROFILE=debian12 ./cp_master.sh fix
 ./cp_master.sh verify
 ./cp_master.sh forensics
+./cp_master.sh fixall     # TRAINING ONLY — script does everything incl. passwords
 ```
 
 Env overrides: `PROFILE` (auto | explicit), `AUTO_WRITE_ANSWERS` (0/1), `SUDO_PASS_FILE` (default `/tmp/.cp_sudo_pass`).
@@ -99,6 +103,32 @@ Known limitations:
 - Version compare falls back to exact string match if a reported version isn't a valid `[Version]` (e.g., "8.6.8 build 4012").
 - Runtime behavior on a live training image is the final proof — run `audit` → `fix` → `verify` on the training image before trusting the mapping.
 
+## How the team uses it (the 55 → 95 workflow)
+
+The scripts are deliberately **not** a "do everything" cheat. They cover the
+scriptable half of the scorecard, and the human does the rest:
+
+1. **Pull the scripts** from this repo onto the training VM (USB or paste).
+2. **`fix` (default stage)** — the script does the *script scope*:
+   GPO/security options (blank password, last-logged-in user, enumerate admins),
+   firewall, RDP, service states, shares, software versions, backdoors, updates.
+   On the Win11 TR2 image this lands you at **roughly 55% of the scored points**.
+3. **The student does the human scope BY HAND** — the script prints the exact
+   list at the end of `fix`, with GUI paths and the equivalent PowerShell:
+   - all **passwords** (set strong, replace insecure),
+   - all **user/group changes** (remove bad user, demote admins, create the group),
+   - **user-rights assignment** (strip audit + take-ownership from the named accounts),
+   - the **forensics questions** (`forensics` stage prints the decode chain).
+4. **`verify`** — re-checks every item; with the human work done you should be
+   at **~95+** (the remaining gap is GUI-only items a script can't touch).
+5. **`fixall` (TRAINING ONLY)** — the script also performs the password and
+   user changes, to measure what a full-score image looks like.
+   **Never** use it as a substitute for the human scope in real practice.
+
+The point of the split: running the script should *teach* the exact sequence
+and values — then the student reproduces the human scope by hand during the
+actual round (3011.4: round scripts must be written by the competitors).
+
 ## Reproducing a round by hand (the actual competition workflow)
 
 1. **Audit first.** Read every scored requirement from the round's readme; confirm the current state of each item (the scripts' `audit` stage shows exactly which commands/registry keys to check).
@@ -109,10 +139,18 @@ Known limitations:
 ## Files
 
 ```
-cp_master/
-├── README.md            # this file
-├── cp_master.sh         # Debian 12 + Mint 21 engine
-└── cp_master_win.ps1    # Windows 11 TR2 engine
+2026_Scripts/
+├── Practice Round/
+│   └── Linux/V1.sh
+├── State Round/                 # the master scripts
+│   ├── Linux/cp_master.sh       # Debian 12 + Mint 21 engine
+│   └── Windows/cp_master_win.ps1 # Windows 11 TR2 engine
+├── Training Round 1/
+│   └── Linux/V1.sh
+└── Training Round 2/
+    └── Linux/                   # earlier per-round scripts
 ```
 
-*Built as a learning aid for CyberPatriot training. Not affiliated with or endorsed by NICE. Keep private. Never use in scored rounds.*
+Each round folder gets its own copy; the master engine is the same file — a new round is a new profile block, not a new script.
+
+*Built as a learning aid for CyberPatriot training. Not affiliated with or endorsed by NICE. Public repo — share it. Never use in scored rounds.*

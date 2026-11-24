@@ -19,14 +19,25 @@
    * Never point this at a live scored image. Training images only.
 
  USAGE  (from an ELEVATED PowerShell prompt INSIDE the VM)
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\cp_master_win.ps1 -Stage audit
    powershell -NoProfile -ExecutionPolicy Bypass -File .\cp_master_win.ps1 -Stage fix
    powershell -NoProfile -ExecutionPolicy Bypass -File .\cp_master_win.ps1 -Stage verify
    powershell -NoProfile -ExecutionPolicy Bypass -File .\cp_master_win.ps1 -Stage forensics
-     audit     : read-only. Reports every item's current state + the fix needed.
-     fix       : applies all remediations (idempotent - safe to re-run).
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\cp_master_win.ps1 -Stage audit
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\cp_master_win.ps1 -Stage fixall
+     fix       : SCRIPT SCOPE (default). Applies script-scope remediations,
+                 then prints the STUDENT HOMEWORK list (passwords, users,
+                 groups, user-rights) with the exact GUI + PowerShell steps.
      verify    : re-checks every item and prints a PASS/FAIL scorecard.
      forensics : prints the forensics answers (computed live where possible).
+     audit     : read-only. Reports every item's current state + the fix needed.
+     fixall    : TRAINING ONLY. Script does EVERYTHING, incl. passwords and
+                 user changes - use it to measure the full score.
+
+ SCOPE SPLIT (team doctrine - the script never sets passwords or edits users)
+   script : firewall, RDP, services, shares, software, backdoors, updates,
+            GPO security options (blank pw / last user / enumerate admins)
+   student: ALL passwords, ALL user/group changes, user-rights revocation,
+            and the forensics answers - BY HAND (the script prints the commands)
 
  SAFETY GUARDS (hard-coded, enforced in every stage)
    * NEVER stop/disable/kill the CCS Client service or ccsclient process.
@@ -44,8 +55,8 @@
 
 [CmdletBinding()]
 param(
-    [ValidateSet("audit","fix","verify","forensics")]
-    [string]$Stage = "audit",
+    [ValidateSet("audit","fix","verify","forensics","fixall")]
+    [string]$Stage = "fix",
 
     [string]$Profile = "Win11_TR2"   # Win11_TR2 = CP19 Round-2 TRAINING image (only supported profile)
 )
@@ -415,6 +426,34 @@ function Run-Audit {
 }
 
 # ======================================================================= FIX
+function Report-Student-Users {
+    Log "STUDENT HOMEWORK (users) - do these BY HAND in the VM" "Yellow"
+    if ($P.RemoveUser -and (Test-User $P.RemoveUser)) {
+        Log "  1) delete user '$($P.RemoveUser)':  lusrmgr.msc  >  Users  >  right-click  >  Delete" "White"
+        Log "       (or:  Remove-LocalUser -Name '$($P.RemoveUser)')" "DarkGray"
+    }
+    foreach ($u in $P.DemoteToStd) {
+        if (Is-AdminUser $u) {
+            Log "  2) demote '$u' to standard user:  lusrmgr.msc  >  Users  >  $u  >  uncheck Administrators" "White"
+            Log "       (or:  Remove-LocalGroupMember -Group 'Administrators' -Member '$u')" "DarkGray"
+        }
+    }
+    foreach ($kv in $P.SetPassword.GetEnumerator()) {
+        Log "  3) set a strong password on '$($kv.Key)':  right-click the user  >  Set Password" "White"
+        Log "       (or:  (Read-Host -AsSecureString) | ConvertFrom-SecureString | Set-Content -Encoding XML pw.txt" "DarkGray"
+        Log "             Import-Clixml pw.txt | Set-LocalUser -Name '$($kv.Key)' -Password)" "DarkGray"
+    }
+    foreach ($kv in $P.ChangeWeakPw.GetEnumerator()) {
+        Log "  4) replace '$($kv.Key)'s insecure password (same 'Set Password' GUI)" "White"
+    }
+    if ($P.NewGroup) {
+        Log "  5) create group '$($P.NewGroup)':  Computer  >  Manage  >  Local Users and Groups  >  Groups  >  New" "White"
+        Log "       members to add: $($P.NewGroupMembers -join ', ')" "DarkGray"
+        Log "       (or:  New-LocalGroup -Name '$($P.NewGroup)';  foreach member:  Add-LocalGroupMember -Group '$($P.NewGroup)' -Member <user>)" "DarkGray"
+    }
+}
+
+# TRAINING ONLY (fixall): the script itself makes the user changes
 function Fix-Users {
     if ($P.RemoveUser -and (Test-User $P.RemoveUser)) {
         if (In-Group "Administrators" $P.RemoveUser) { Remove-LocalGroupMember -Group "Administrators" -Member $P.RemoveUser -ErrorAction SilentlyContinue }
@@ -451,10 +490,23 @@ function Fix-Users {
     }
 }
 
-function Fix-Policy {
+# student-scope: password policy (history / complexity / lockout) - fixall ONLY
+function Set-PasswordPolicy {
     Set-LocalPasswordPolicy -HistoryCount $P.PwHistory -ComplexityEnabled $P.PwComplexity
     Set-LocalAccountLockout -Threshold $P.LockoutThreshold
-    Log "FIX: password history=$($P.PwHistory), complexity=$($P.PwComplexity), lockout=$($P.LockoutThreshold)." "Green"
+    Log "SET: password history=$($P.PwHistory), complexity=$($P.PwComplexity), lockout=$($P.LockoutThreshold) (training/fixall)." "Green"
+}
+
+function Report-Student-PasswordPolicy {
+    Log "STUDENT HOMEWORK (password policy) - do these BY HAND" "Yellow"
+    Log "  set: history=$($P.PwHistory)  complexity=$($P.PwComplexity)  lockout threshold=$($P.LockoutThreshold)" "White"
+    Log "  GUI:  secpol.msc  >  Account Policies  >  Password Policy  (and Account Lockout Policy)" "DarkGray"
+    Log "  (or:  Set-LocalPasswordPolicy -HistoryCount $($P.PwHistory) -ComplexityEnabled $($P.PwComplexity)" "DarkGray"
+    Log "        Set-LocalAccountLockout -Threshold $($P.LockoutThreshold))" "DarkGray"
+}
+
+function Fix-Policy {
+    Log "POLICY: script-scope security options (password policy = STUDENT scope, see homework list)" "Yellow"
 
     $sys = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
     Set-RegValue $sys "LimitBlankPasswordUse" 1
@@ -541,6 +593,22 @@ function Fix-Software {
     }
 }
 
+function Report-Student-UserRights {
+    Log "STUDENT HOMEWORK (user rights assignment) - do these BY HAND" "Yellow"
+    foreach ($kv in $P.RevokeRights.GetEnumerator()) {
+        $priv = $kv.Key
+        $friendly = switch ($priv) {
+            "SeAuditPrivilege"       { "Manage auditing and security log" }
+            "SeTakeOwnershipPrivilege" { "Take ownership of objects or other objects" }
+            default                  { $priv }
+        }
+        Log "  remove '$($kv.Value -join ", ")' from right: '$friendly'  ($priv)" "White"
+        Log "  GUI:  secpol.msc  >  Local Policies  >  User Rights Assignment  >  double-click the right  >  Remove" "DarkGray"
+        Log "  (or:  auditpol /export /f pol.inf ; edit the $priv line ; auditpol /restore /f pol.inf)" "DarkGray"
+    }
+}
+
+# TRAINING ONLY (fixall): the script strips the user rights itself
 function Fix-UserRights {
     # Build a secedit INF that strips the listed users from each privilege.
     $exp = Join-Path $env:TEMP ("cp_sed_" + [guid]::NewGuid().ToString("N") + ".inf")
@@ -578,9 +646,26 @@ function Fix-UserRights {
 }
 
 function Run-Fix {
-    Log "=== FIX  $($P.Image)  (stage=fix) ===" "Cyan"
-    Fix-Users; Fix-Policy; Fix-Network; Fix-Services; Fix-Software; Fix-UserRights
-    Log "=== FIX complete. Re-run  -Stage verify  to confirm. ===" "Green"
+    Log "=== FIX  $($P.Image)  (stage=fix) — SCRIPT SCOPE ONLY ===" "Cyan"
+    Log "script does: security options, firewall, RDP, services, shares, software, backdoors." "White"
+    Log "student does: passwords, users/groups, user-rights (BY HAND — list printed after fixes)." "White"
+    Fix-Policy; Fix-Network; Fix-Services; Fix-Software
+    Log "=== SCRIPT SCOPE FIX COMPLETE ===" "Green"
+    Log "" 
+    Report-Student-Users
+    Log ""
+    Report-Student-PasswordPolicy
+    Log ""
+    Report-Student-UserRights
+    Log ""
+    Log "WHEN DONE:  re-run  -Stage verify  — every line should be PASS (target ~95+)." "Yellow"
+}
+
+# TRAINING ONLY — script does everything, incl. passwords + users (measure full score)
+function Run-FixAll {
+    Log "=== FIXALL  $($P.Image)  (stage=fixall) — TRAINING ONLY: script does EVERYTHING ===" "Red"
+    Fix-Users; Set-PasswordPolicy; Fix-Policy; Fix-Network; Fix-Services; Fix-Software; Fix-UserRights
+    Log "=== FIXALL complete. Re-run  -Stage verify  to confirm. ===" "Green"
 }
 
 # ==================================================================== VERIFY
@@ -662,6 +747,7 @@ function Run-Forensics {
 switch ($Stage) {
     "audit"     { Run-Audit }
     "fix"       { Run-Fix }
+    "fixall"    { Run-FixAll }
     "verify"    { Run-Verify }
     "forensics" { Run-Forensics }
     default     { Write-Host "Unknown stage '$Stage'." -ForegroundColor Red; exit 1 }
