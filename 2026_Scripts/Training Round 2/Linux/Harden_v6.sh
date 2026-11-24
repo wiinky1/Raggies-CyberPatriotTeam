@@ -1,27 +1,5 @@
 #!/usr/bin/env bash
-# =====================================================================
-#  CyberPatriot 2026 — SYSTEM HARDENING, v2 (merged)
-#  Base : cp19 round script (harden.sh — the one that scored 100/100 on
-#         Training Round 2 Debian 12, 2026-11-11)
-#  Merged into the structure of cap_hardening_2026.sh (step banners,
-#         preflight, idempotency, final report) + added its extra sections
-#         (DM check, browser defaults, polling svc purge, samba, sshd
-#         drop-in) that other images score (Mint 21, later rounds).
-#
-#  Round config:  EDIT THE BLOCK BELOW for each image.
-#  Port to Mint 21 / another image by changing CONFIG only — the generic
-#  sections then apply as-is, and the round-specific sections run
-#  no-op-safe if the users/objects don't exist.
-#
-#  NOT in this script (per-round, by hand): FORENSICS answers (question
-#  changes every round), and anything the coach says not to touch this
-#  round (auto-login password, UTC, CCS client, critical services).
-#
-#  Run : sudo bash harden_v2.sh
-#  PAM safety: faillock is wired only via pam-auth-update with the
-#  three pam-configs from the official answer key; we never sed
-#  pam_deny/pam_unix lines without a grep-verify + sshd/login check after.
-# =====================================================================
+
 set -uo pipefail
 LC_ALL=C
 export DEBIAN_FRONTEND=noninteractive

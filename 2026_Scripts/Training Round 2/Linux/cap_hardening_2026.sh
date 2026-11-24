@@ -1,22 +1,5 @@
 #!/usr/bin/env bash
-# =====================================================================
-#  CyberPatriot 2026 — FULL SYSTEM HARDENING  (distro-agnostic: Mint, Ubuntu, or
-#  any CP-issued VM — the display manager is auto-detected)
-#  Scope : everything the rules book scores, EXCEPT (a) the user-audit
-#          tasks (create tchalla / delete unauthorized users / set the 17
-#          passwords / chage -d 0) and (b) the forensics ANSWER — the
-#          forensics question changes every round, so it is not pre-baked.
-#          Do (a) and (b) by hand, per round.
-#
-#  Run   :  sudo bash cap_hardening_2026.sh [optional:file-to-hexdump]
-#          (only pass a file if you want a raw hexdump; the forensics
-#           ANSWER is still yours to work out against THIS round's question)
-#
-#  Rules ref: CP19 Rules Book 2026 — sections cited inline below.
-#  Design  : idempotent, no `set -e` so one soft-fail never kills the
-#          run; every section prints an OK/WARN line; final report prints
-#          the settings to read off and paste into the report UI.
-# =====================================================================
+
 set -uo pipefail
 LC_ALL=C
 export DEBIAN_FRONTEND=noninteractive

@@ -1,34 +1,5 @@
 #!/usr/bin/env bash
-#
-# harden-debian12.sh — generic Debian 12 (bookworm) security hardening
-#
-# What it does (all steps idempotent, safe to re-run):
-#   1. Points APT at the current stable bookworm repos (only if frozen/stale),
-#      runs apt update + upgrade, and ensures EXTRA_PACKAGES are at latest stable.
-#   2. Installs and enables UFW with the SSH port allowed first (protects SSH).
-#   3. Hardens PAM: PASS_MIN_DAYS 7, password minlen 12 (pam_pwquality),
-#      and removes 'nullok'.
-#   4. Hardens sysctl: net.ipv4.tcp_syncookies=1, net.ipv4.ip_forward=0 (+ applies).
-#   5. /etc/shadow permissions -> 640.
-#   6. APT::Periodic::Update-Package-Lists (set LAST, so APT cannot revert it).
-#   7. Disables UNWANTED_SERVICES (skipped if not installed; sshd is NEVER touched).
-#   8. Optional: removes a rogue 'nc.traditional' shell backdoor (binary, processes,
-#      and its root crontab line) if present.
-#   9. Purges PROHIBITED_PACKAGES (round-specific prohibited software), removes
-#      prohibited .mp3 media under /home, and disables SSH root login (safe tweak).
-#
-# Intentionally OUT OF SCOPE (machine/scenario-specific judgments):
-#   - user account management (creating, deleting, passwords, group membership)
-#   - forensics questions / evidence files
-#   - stopping or removing critical services (sshd / LightDM / chromium NEVER stopped)
-#
-# Round-specific (edit the CONFIG lists above to match each round's answer key):
-#   - PROHIBITED_PACKAGES : prohibited software to purge (e.g. aisleriot, wireshark)
-#   - REMOVE_MP3          : delete prohibited .mp3 media planted under /home
-#   - DISABLE_SSH_ROOT    : PermitRootLogin no (safe; does NOT stop the sshd service)
-#
-# Usage: sudo bash harden-debian12.sh [--skip-apt] [--no-backdoor-cleanup]
-#
+
 set -u
 
 # ============================ CONFIG ==========================================

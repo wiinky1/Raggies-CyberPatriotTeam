@@ -1,46 +1,5 @@
 #!/usr/bin/env bash
 # =====================================================================
-#  CyberPatriot — GENERIC Linux hardening (season-agnostic)  [v7]
-#
-#  Design rule (per coach, 2026-11): this script contains ZERO things
-#  that vary between images — no usernames, no roster, no named
-#  services-to-stop, no named packages-to-remove, no password values.
-#  Everything image-specific comes from a sibling file:
-#
-#        round_config.txt   (same directory as this script)
-#
-#  The config is a sourceable shell file. Generate one per round from
-#  that round's README + answer key (the values that change: who to
-#  delete, which password to set, which group to join, minlen,
-#  services to stop, packages to purge, etc.).
-#
-#  Section inventory (v7.1 — covers scored items #1..#26 of the R2 report):
-#    apt update/upgrade (the Chromium/OpenSSH "updated" items) · user tasks
-#    (remove/sudo-removal/group/password — all from config) ·
-#    PASS_MIN_DAYS (login.defs, not PAM) · PAM_BLOCK gate: minlen + lockout
-#    profiles + nullok — OFF by default (owner rule 2026-11-11), enabled only
-#    via PAM_BLOCK=yes in the config after explicit owner approval ·
-#    sysctl syncookies=1 ip_forward=0 · /etc/shadow 640 · services stopped
-#    (config, keep-guarded) · prohibited + poll pkgs purged (config,
-#    keep-guarded) · user-media sweep (config exts) · netcat backdoor
-#    cleanup (packages + exact-name process kill + cron lines) ·
-#    sshd PermitRootLogin no (enforced), sshd kept running ·
-#    UFW install + allow 22 + default deny incoming ·
-#    browser default (chromium/firefox whichever installed) ·
-#    APT auto-updates (lists + downloads + unattended) · DM report · report.
-#  Items NOT scriptable (by design): forensics Q1/Q2 (console work).
-#
-#  Guard rails:
-#    KEEP_SERVICES / KEEP_PKGS in the config are sacrosanct — the
-#    script refuses to stop, disable, or purge anything on the keep
-#    lists even if a STOP/PURGE list also names them. sshd is always
-#    on the keep list internally.
-#
-#  NOT in this script (by design): forensics answers (per-round
-#  console work), /etc/apt/sources.list rewrite (distro/round specific
-#  — do it by hand or extend the config), unique-identifier entry,
-#  UTC, CCS client.
-#
 #  Usage:  sudo bash Harden_v7.sh            (uses ./round_config.txt)
 #          sudo bash Harden_v7.sh /path/cfg  (explicit config)
 #          add --yes (any position) to skip the enter-prompt
