@@ -20,16 +20,19 @@
 #    - CIS Ubuntu 20.04/22.04 v3.0.0 + Mint 22 v1.0.0: same control families,
 #      numbered 5.x (sshd/sysctl/pam) there
 #
-#  SCOPE SPLIT (team doctrine — the script never does passwords or user config)
-#    script (fix) : everything EXCEPT passwords and user accounts —
-#                   file perms, sysctl, SSH, services, UFW, sources/upgrades,
-#                   prohibited software/media, backdoor sweep
-#    student      : ALL password work (policy + resets), ALL user configuration
-#                   (removals, demotions, groups, new admin), and the forensics
-#                   answers — BY HAND. `fix` detects each item and prints the
-#                   exact commands to run.
+#  SCOPE SPLIT (team doctrine — the student practices the hard parts by hand)
+#    script (fix) : everything EXCEPT adding/removing user accounts and
+#                   setting individual user passwords — file perms, sysctl,
+#                   SSH, services, UFW, sources/upgrades, AND the full
+#                   password POLICY (minlen, lockout, pwhistory, aging,
+#                   root lock, group memberships, requested groups)
+#    student      : only three things, BY HAND — (1) setting/changing USER
+#                   PASSWORDS, (2) ADDING/REMOVING USERS (incl. the new
+#                   admin), (3) the forensics answers. `fix` detects each
+#                   item and prints the exact commands to run.
 #    fixall       : TRAINING ONLY — the script does everything, including
-#                   passwords and user changes (use to measure the full score)
+#                   user passwords and account add/remove (use to measure
+#                   the full score)
 #
 #  STAGES
 #    (no argument) = fix : apply script-scope fixes, then print the student homework list
@@ -391,46 +394,21 @@ chk_users() {
   fi
 }
 
-fix_users() {
-  [ ${#ADMIN_NAMES[@]} -eq 0 ] && [ ${#USER_NAMES[@]} -eq 0 ] && { note "no roster — skipping user fixes"; return 0; }
-  local u
-  # 1) remove unlisted user accounts (back up home to /root/cp_removed_users)
-  $SUDO awk -F: '$3>=1000 && $1!="nobody" && $1!="ftp" {print $1}' /etc/passwd > /tmp/.cp_uid1000 2>/dev/null
+fix_user_policy() {
+  # ------------------ SCRIPT SCOPE: groups, root lock, aging ------------------
+  # (adding/removing user ACCOUNTS and setting their passwords stays the
+  #  student's job — see fix_user_secrets / the homework list)
+  local u m
+  # 1) sudo-group cleanup: demote any user not on the README roster
   while IFS= read -r u; do
     [ -n "$u" ] || continue
     if ! is_listed "$u" && [ "$u" != "$NEW_ADMIN" ]; then
-      note "removing user $u"
-      $SUDO pkill -u "$u" 2>/dev/null || true
-      $SUDO userdel -r "$u" 2>&1 | grep -viE 'no such|not found' || true
-    fi
-  done < /tmp/.cp_uid1000
-
-  # 2) clean sudo group
-  while IFS= read -r u; do
-    [ -n "$u" ] || continue
-    if ! is_listed "$u" && [ "$u" != "$NEW_ADMIN" ]; then
-      note "removing $u from sudo group"
+      note "demoting '$u' from the sudo group (removing the account itself is your homework)"
       $SUDO gpasswd -d "$u" sudo 2>/dev/null || true
     fi
   done < <($SUDO getent group sudo 2>/dev/null | cut -d: -f4 | tr ',' '\n')
 
-  # 3) weak admin passwords -> new strong 16-char pw (12+ required)
-  local w
-  for w in "${WEAK_TARGETS[@]:-}"; do
-    [ -n "$w" ] || continue
-    [ "$w" = "$AUTOLOGIN" ] && { note "SKIP password change for $w (auto-login user)"; continue; }
-    [ -n "$($SUDO getent passwd "$w" 2>/dev/null)" ] || continue
-    local npw
-    npw="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 10)$(tr -dc 'a-z0-9' </dev/urandom | head -c 4)$(tr -dc '@#%&*!' </dev/urandom | head -c 2)9aXk"
-    $SUDO chage -d 10000 "$w" 2>/dev/null || true   # clear forced-change so new pw takes effect
-    $SUDO usermod -p "$(yescrypt_hash "$npw" 2>/dev/null || openssl passwd -6 -salt cp19 "$npw" 2>/dev/null)" "$w" 2>/dev/null \
-      || echo "$npw" | $SUDO chage -d 10000 -p "$npw" "$w" 2>/dev/null || true
-    note "password changed for $w (new pw recorded in /root/cp_pw_changes.log)"
-    echo "$w : $npw" >> /root/cp_pw_changes.log
-  done
-
-  # 4) requested group(s)
-  local m
+  # 2) requested group(s) + membership
   if [ -n "$NEW_GROUP" ]; then
     $SUDO getent group "$NEW_GROUP" >/dev/null 2>&1 || $SUDO groupadd "$NEW_GROUP" 2>/dev/null || $SUDO addgroup --system "$NEW_GROUP" 2>/dev/null
     for m in "${NEW_GROUP_MEMBERS[@]:-}"; do
@@ -447,7 +425,53 @@ fix_users() {
     note "user '$ADD_USER_TO_USER' added to group '$ADD_USER_TO_GROUP'"
   fi
 
-  # 5) new admin account
+  # 3) root locked if blank (hardening — the script never sets a secret)
+  local rootpw; rootpw="$($SUDO awk -F: '$1=="root"{print $2}' /etc/shadow 2>/dev/null)"
+  [ -z "$rootpw" ] && { $SUDO passwd -l root 2>/dev/null; note "root password locked (was blank)"; }
+
+  # 4) password AGING POLICY on every live user (policy, not password setting)
+  $SUDO awk -F: '$3>=1000 && $1!="nobody" && $1!="ftp" {print $1}' /etc/passwd 2>/dev/null > /tmp/.cp_uid1000
+  while IFS= read -r u; do
+    [ -n "$u" ] || continue
+    $SUDO chage -M "$PASSMAX" -m "$PASSMIN" -W "$WARNAGE" "$u" 2>/dev/null || true
+  done < /tmp/.cp_uid1000
+  $SUDO sed -i -E "s/^#?PASS_MAX_DAYS[[:space:]]+.*$/PASS_MAX_DAYS\t$PASSMAX/; s/^#?PASS_MIN_DAYS[[:space:]]+.*$/PASS_MIN_DAYS\t$PASSMIN/; s/^#?PASS_WARN_AGE[[:space:]]+.*$/PASS_WARN_AGE\t$WARNAGE/" /etc/login.defs 2>/dev/null
+  note "password aging: chage -M $PASSMAX -m $PASSMIN -W $WARNAGE on all user accounts; /etc/login.defs set"
+}
+
+fix_user_secrets() {
+  # ------------------ STUDENT SCOPE (fixall only): accounts + secrets --------
+  # In a real round these three blocks are done BY HAND by the student:
+  #   - removing unlisted user accounts
+  #   - setting a strong password for each flagged admin
+  #   - creating the new admin account
+  local u w
+  # 1) remove unlisted user accounts (back up home to /root/cp_removed_users)
+  $SUDO awk -F: '$3>=1000 && $1!="nobody" && $1!="ftp" {print $1}' /etc/passwd > /tmp/.cp_uid1000 2>/dev/null
+  while IFS= read -r u; do
+    [ -n "$u" ] || continue
+    if ! is_listed "$u" && [ "$u" != "$NEW_ADMIN" ]; then
+      note "removing user $u"
+      $SUDO pkill -u "$u" 2>/dev/null || true
+      $SUDO userdel -r "$u" 2>&1 | grep -viE 'no such|not found' || true
+    fi
+  done < /tmp/.cp_uid1000
+
+  # 2) weak admin passwords -> new strong 16-char pw (12+ required)
+  for w in "${WEAK_TARGETS[@]:-}"; do
+    [ -n "$w" ] || continue
+    [ "$w" = "$AUTOLOGIN" ] && { note "SKIP password change for $w (auto-login user)"; continue; }
+    [ -n "$($SUDO getent passwd "$w" 2>/dev/null)" ] || continue
+    local npw
+    npw="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 10)$(tr -dc 'a-z0-9' </dev/urandom | head -c 4)$(tr -dc '@#%&*!' </dev/urandom | head -c 2)9aXk"
+    $SUDO chage -d 10000 "$w" 2>/dev/null || true   # clear forced-change so new pw takes effect
+    $SUDO usermod -p "$(yescrypt_hash "$npw" 2>/dev/null || openssl passwd -6 -salt cp19 "$npw" 2>/dev/null)" "$w" 2>/dev/null \
+      || echo "$npw" | $SUDO chage -d 10000 -p "$npw" "$w" 2>/dev/null || true
+    note "password changed for $w (new pw recorded in /root/cp_pw_changes.log)"
+    echo "$w : $npw" >> /root/cp_pw_changes.log
+  done
+
+  # 3) new admin account (student does this by hand in a real round)
   if [ -n "$NEW_ADMIN" ]; then
     if ! $SUDO getent passwd "$NEW_ADMIN" >/dev/null 2>&1; then
       $SUDO useradd -m -s /bin/bash "$NEW_ADMIN" 2>/dev/null || $SUDO adduser --disabled-password --gecos "" "$NEW_ADMIN" 2>/dev/null
@@ -459,18 +483,11 @@ fix_users() {
     echo "$NEW_ADMIN : $npx" >> /root/cp_pw_changes.log
     note "admin account $NEW_ADMIN created (forced change at next login)"
   fi
+}
 
-  # 6) root locked if blank
-  local rootpw; rootpw="$($SUDO awk -F: '$1=="root"{print $2}' /etc/shadow 2>/dev/null)"
-  [ -z "$rootpw" ] && { $SUDO passwd -l root 2>/dev/null; note "root password locked (was blank)"; }
-
-  # 7) aging on every live user
-  while IFS= read -r u; do
-    [ -n "$u" ] || continue
-    $SUDO chage -M "$PASSMAX" -m "$PASSMIN" -W "$WARNAGE" "$u" 2>/dev/null || true
-  done < /tmp/.cp_uid1000
-  $SUDO sed -i -E "s/^#?PASS_MAX_DAYS[[:space:]]+.*$/PASS_MAX_DAYS\t$PASSMAX/; s/^#?PASS_MIN_DAYS[[:space:]]+.*$/PASS_MIN_DAYS\t$PASSMIN/; s/^#?PASS_WARN_AGE[[:space:]]+.*$/PASS_WARN_AGE\t$WARNAGE/" /etc/login.defs 2>/dev/null
-  note "chage -M $PASSMAX -m $PASSMIN -W $WARNAGE applied to all user accounts; login.defs set"
+fix_users() {  # fixall = full user work (secrets + policy)
+  fix_user_policy
+  fix_user_secrets
 }
 
 # ----------------------------- PAM -------------------------------------------
@@ -583,7 +600,7 @@ fix_files() {
   $SUDO chmod 644 /etc/passwd /etc/passwd- /etc/group /etc/group- 2>/dev/null
   $SUDO chmod 640 /etc/securetty 2>/dev/null
   $SUDO chmod 640 /boot/grub/grub.cfg 2>/dev/null
-  note "shadow/gshadow 640, passwd/group 644, securetty 640, grub.cfg 640 (password aging is the student's — see homework list)"
+  note "shadow/gshadow 640, passwd/group 644, securetty 640, grub.cfg 640 (password aging is applied by fix_user_policy)"
 }
 
 # ----------------------------- sysctl ----------------------------------------
@@ -912,12 +929,13 @@ fix_uwf() {
 }
 
 # ------------------------ student homework list ------------------------------
-# Detects every student-scope item (passwords, users, forensics) and prints the
-# exact commands. Called at the end of the `fix` stage.
+# The student only does three things by hand: USER PASSWORDS, ADDING/REMOVING
+# USERS (incl. the new admin), and the forensics answers. Everything else
+# (password policy, groups, root lock, aging) is applied by the script in `fix`.
 student_report() {
-  log "STUDENT HOMEWORK — do these BY HAND (the script never does passwords/users)"
+  log "STUDENT HOMEWORK — do these BY HAND (the script never sets user passwords or adds/removes users)"
   echo ""
-  note "── PASSWORDS ────────────────────────────────────────────────────────"
+  note "── PASSWORDS (yours to set) ─────────────────────────────────────────"
   if [ ${#WEAK_TARGETS[@]} -gt 0 ]; then
     local w
     for w in "${WEAK_TARGETS[@]}"; do
@@ -925,28 +943,18 @@ student_report() {
       note "new 12+ char password for admin '$w' →  sudo passwd $w"
     done
   else
-    note "no weak admin passwords flagged by the README (still verify each listed admin has a strong one)"
-  fi
-  local rootpw
-  rootpw="$($SUDO awk -F: '$1=="root"{print $2}' /etc/shadow 2>/dev/null)"
-  if [ -z "$rootpw" ]; then
-    note "root password is BLANK → lock it:  sudo passwd -l root"
-  else
-    note "root password is set (confirm it is strong)"
+    note "no weak admin passwords flagged (still confirm each listed admin has a strong one)"
   fi
   if [ -n "$NEW_ADMIN" ]; then
-    note "force password change on new admin '$NEW_ADMIN' →  sudo chage -d 0 $NEW_ADMIN"
+    if $SUDO id "$NEW_ADMIN" >/dev/null 2>&1; then
+      note "new admin '$NEW_ADMIN' exists → set a strong password + force change:  sudo passwd $NEW_ADMIN && sudo chage -d 0 $NEW_ADMIN"
+    else
+      note "create admin '$NEW_ADMIN' (sudo group, strong password, forced change) →"
+      note "  sudo useradd -m -G sudo $NEW_ADMIN && sudo chage -d 0 $NEW_ADMIN && sudo passwd $NEW_ADMIN"
+    fi
   fi
-  note "password aging:  sudo chage -M $PASSMAX -m $PASSMIN -W $WARNAGE <each user>"
-  note "   and /etc/login.defs →  PASS_MAX_DAYS $PASSMAX   PASS_MIN_DAYS $PASSMIN   PASS_WARN_AGE $WARNAGE"
-  note "min length $MINLEN →  sudo apt install libpam-pwquality;  /etc/security/pwquality.conf: minlen=$MINLEN;"
-  note "   /etc/pam.d/common-password: pam_pwquality.so minlen=$MINLEN (remove 'nullok' from common-auth too)"
-  note "lockout 5 failed / 15 min →  /etc/pam.d/common-auth:"
-  note "   auth    required    pam_faillock.so preauth  silent deny=5 unlock_time=900"
-  note "   auth    [default=die] pam_faillock.so authfail deny=5"
-  note "remember last $RECS →  /etc/pam.d/common-password:  pam_pwhistory.so use_authtok remember=$RECS"
   echo ""
-  note "── USERS & GROUPS ───────────────────────────────────────────────────"
+  note "── USERS (yours to add/remove) ──────────────────────────────────────"
   local u extra=""
   $SUDO awk -F: '$3>=1000 && $1!="nobody" && $1!="ftp" {print $1}' /etc/passwd 2>/dev/null > /tmp/.cp_uid1000
   while IFS= read -r u; do
@@ -959,34 +967,6 @@ student_report() {
     done
   else
     note "no unauthorized local users found (roster check clean)"
-  fi
-  local s extra2=""
-  while IFS= read -r s; do
-    [ -n "$s" ] || continue
-    is_listed "$s" || [ "$s" = "$NEW_ADMIN" ] || extra2="$extra2 $s"
-  done < <($SUDO getent group sudo 2>/dev/null | cut -d: -f4 | tr ',' '\n')
-  for s in $extra2; do
-    note "remove '$s' from the sudo group →  sudo gpasswd -d $s sudo"
-  done
-  if [ -n "$NEW_ADMIN" ]; then
-    if $SUDO id "$NEW_ADMIN" >/dev/null 2>&1; then
-      note "new admin '$NEW_ADMIN' exists → confirm: sudo group + forced change (chage -d 0)"
-    else
-      note "create admin '$NEW_ADMIN' (sudo, forced change) →  sudo useradd -m -G sudo $NEW_ADMIN && sudo chage -d 0 $NEW_ADMIN && sudo passwd $NEW_ADMIN"
-    fi
-  fi
-  if [ -n "$NEW_GROUP" ] && [ ${#NEW_GROUP_MEMBERS[@]} -gt 0 ]; then
-    if $SUDO getent group "$NEW_GROUP" >/dev/null 2>&1; then
-      local m
-      for m in "${NEW_GROUP_MEMBERS[@]}"; do
-        $SUDO getent group "$NEW_GROUP" | grep -qw "$m" || note "add member to group '$NEW_GROUP' →  sudo adduser $m $NEW_GROUP"
-      done
-    else
-      note "create group '$NEW_GROUP' and add member(s): ${NEW_GROUP_MEMBERS[*]}  →  sudo addgroup $NEW_GROUP && sudo adduser <each member> $NEW_GROUP"
-    fi
-  fi
-  if [ -n "$ADD_USER_TO_USER" ] && [ -n "$ADD_USER_TO_GROUP" ]; then
-    note "add user '$ADD_USER_TO_USER' to group '$ADD_USER_TO_GROUP' →  sudo adduser $ADD_USER_TO_USER $ADD_USER_TO_GROUP"
   fi
   echo ""
   note "── FORENSICS ────────────────────────────────────────────────────────"
@@ -1016,13 +996,15 @@ case "$STAGE" in
     ;;
   fix)
     need_root; detect_profile; parse_readme
-    log "CP MASTER FIX — profile=$PROFILE (script scope only: files->sysctl->ssh->services->ufw->purge+updates)"
+    log "CP MASTER FIX — profile=$PROFILE (script scope: files->sysctl->ssh->services->ufw->updates->user policy->pam policy)"
     fix_files
     fix_sysctl
     fix_ssh
     fix_services
     fix_uwf
     fix_sources_and_updates
+    fix_user_policy
+    fix_pam
     log "FIX COMPLETE (script scope)"
     echo
     student_report

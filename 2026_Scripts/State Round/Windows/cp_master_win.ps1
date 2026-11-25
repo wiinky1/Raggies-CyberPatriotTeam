@@ -24,20 +24,25 @@
    powershell -NoProfile -ExecutionPolicy Bypass -File .\cp_master_win.ps1 -Stage forensics
    powershell -NoProfile -ExecutionPolicy Bypass -File .\cp_master_win.ps1 -Stage audit
    powershell -NoProfile -ExecutionPolicy Bypass -File .\cp_master_win.ps1 -Stage fixall
-     fix       : SCRIPT SCOPE (default). Applies script-scope remediations,
-                 then prints the STUDENT HOMEWORK list (passwords, users,
-                 groups, user-rights) with the exact GUI + PowerShell steps.
+     fix       : SCRIPT SCOPE (default). Applies script-scope remediations
+                 (security options, firewall, RDP, services, shares, software,
+                 backdoors, password policy, user demotions + groups,
+                 user-rights), then prints the STUDENT HOMEWORK list — the
+                 student only does USER PASSWORDS + ADD/REMOVE USERS + forensics,
+                 BY HAND, with the exact GUI + PowerShell steps.
      verify    : re-checks every item and prints a PASS/FAIL scorecard.
      forensics : prints the forensics answers (computed live where possible).
      audit     : read-only. Reports every item's current state + the fix needed.
      fixall    : TRAINING ONLY. Script does EVERYTHING, incl. passwords and
                  user changes - use it to measure the full score.
 
- SCOPE SPLIT (team doctrine - the script never sets passwords or edits users)
-   script : firewall, RDP, services, shares, software, backdoors, updates,
-            GPO security options (blank pw / last user / enumerate admins)
-   student: ALL passwords, ALL user/group changes, user-rights revocation,
-            and the forensics answers - BY HAND (the script prints the commands)
+ SCOPE SPLIT (team doctrine - the student practices the hard parts by hand)
+   script : firewall, RDP, services, shares, software, backdoors, password
+            policy (history/complexity/lockout), user demotions + groups,
+            user-rights revocation, GPO security options, updates
+   student: only three things - USER PASSWORDS, ADDING/REMOVING USERS (incl.
+            the new admin), and the forensics answers - BY HAND (the script
+            prints the exact commands)
 
  SAFETY GUARDS (hard-coded, enforced in every stage)
    * NEVER stop/disable/kill the CCS Client service or ccsclient process.
@@ -426,55 +431,35 @@ function Run-Audit {
 }
 
 # ======================================================================= FIX
-function Report-Student-Users {
-    Log "STUDENT HOMEWORK (users) - do these BY HAND in the VM" "Yellow"
+# STUDENT SCOPE: only deleting the user + setting the password — demotions and
+# group creation are done by the script (Fix-UserGroups)
+function Report-Student-UserAccounts {
+    Log "STUDENT HOMEWORK (user accounts) - do these BY HAND in the VM" "Yellow"
     if ($P.RemoveUser -and (Test-User $P.RemoveUser)) {
         Log "  1) delete user '$($P.RemoveUser)':  lusrmgr.msc  >  Users  >  right-click  >  Delete" "White"
         Log "       (or:  Remove-LocalUser -Name '$($P.RemoveUser)')" "DarkGray"
     }
-    foreach ($u in $P.DemoteToStd) {
-        if (Is-AdminUser $u) {
-            Log "  2) demote '$u' to standard user:  lusrmgr.msc  >  Users  >  $u  >  uncheck Administrators" "White"
-            Log "       (or:  Remove-LocalGroupMember -Group 'Administrators' -Member '$u')" "DarkGray"
-        }
-    }
     foreach ($kv in $P.SetPassword.GetEnumerator()) {
-        Log "  3) set a strong password on '$($kv.Key)':  right-click the user  >  Set Password" "White"
+        Log "  2) set a strong password on '$($kv.Key)':  right-click the user  >  Set Password" "White"
         Log "       (or:  (Read-Host -AsSecureString) | ConvertFrom-SecureString | Set-Content -Encoding XML pw.txt" "DarkGray"
         Log "             Import-Clixml pw.txt | Set-LocalUser -Name '$($kv.Key)' -Password)" "DarkGray"
     }
     foreach ($kv in $P.ChangeWeakPw.GetEnumerator()) {
-        Log "  4) replace '$($kv.Key)'s insecure password (same 'Set Password' GUI)" "White"
+        Log "  3) replace '$($kv.Key)'s insecure password (same 'Set Password' GUI)" "White"
     }
     if ($P.NewGroup) {
-        Log "  5) create group '$($P.NewGroup)':  Computer  >  Manage  >  Local Users and Groups  >  Groups  >  New" "White"
-        Log "       members to add: $($P.NewGroupMembers -join ', ')" "DarkGray"
-        Log "       (or:  New-LocalGroup -Name '$($P.NewGroup)';  foreach member:  Add-LocalGroupMember -Group '$($P.NewGroup)' -Member <user>)" "DarkGray"
+        Log "  4) group '$($P.NewGroup)' + members ($($P.NewGroupMembers -join ', ')) were created BY THE SCRIPT - verify in lusrmgr.msc > Groups" "White"
     }
 }
 
-# TRAINING ONLY (fixall): the script itself makes the user changes
-function Fix-Users {
-    if ($P.RemoveUser -and (Test-User $P.RemoveUser)) {
-        if (In-Group "Administrators" $P.RemoveUser) { Remove-LocalGroupMember -Group "Administrators" -Member $P.RemoveUser -ErrorAction SilentlyContinue }
-        Remove-LocalUser -Name $P.RemoveUser -Confirm:$false
-        Log "FIX: removed unauthorized user '$($P.RemoveUser)'." "Green"
-    }
+# SCRIPT SCOPE (fix + fixall): demotions + group creation — everything except
+# user removal and user passwords is done by the script
+function Fix-UserGroups {
     foreach ($u in $P.DemoteToStd) {
         if (Is-AdminUser $u) {
             Remove-LocalGroupMember -Group "Administrators" -Member $u
             Log "FIX: demoted '$u' from Administrators to standard user." "Green"
         }
-    }
-    foreach ($kv in $P.SetPassword.GetEnumerator()) {
-        $sec = ConvertTo-SecureString $kv.Value -AsPlainText -Force
-        Set-LocalUser -Name $kv.Key -Password $sec
-        Log "FIX: set a secure password on '$($kv.Key)'." "Green"
-    }
-    foreach ($kv in $P.ChangeWeakPw.GetEnumerator()) {
-        $sec = ConvertTo-SecureString $kv.Value -AsPlainText -Force
-        Set-LocalUser -Name $kv.Key -Password $sec
-        Log "FIX: replaced insecure password on '$($kv.Key)'." "Green"
     }
     if ($P.NewGroup) {
         if (-not (Test-Group $P.NewGroup)) {
@@ -490,7 +475,27 @@ function Fix-Users {
     }
 }
 
-# student-scope: password policy (history / complexity / lockout) - fixall ONLY
+# STUDENT SCOPE (fixall only): user removal + user passwords — in a real round
+# these are the student's hands-on tasks, so the script only does them in fixall
+function Fix-UserAccounts {
+    if ($P.RemoveUser -and (Test-User $P.RemoveUser)) {
+        if (In-Group "Administrators" $P.RemoveUser) { Remove-LocalGroupMember -Group "Administrators" -Member $P.RemoveUser -ErrorAction SilentlyContinue }
+        Remove-LocalUser -Name $P.RemoveUser -Confirm:$false
+        Log "FIX: removed unauthorized user '$($P.RemoveUser)'." "Green"
+    }
+    foreach ($kv in $P.SetPassword.GetEnumerator()) {
+        $sec = ConvertTo-SecureString $kv.Value -AsPlainText -Force
+        Set-LocalUser -Name $kv.Key -Password $sec
+        Log "FIX: set a secure password on '$($kv.Key)'." "Green"
+    }
+    foreach ($kv in $P.ChangeWeakPw.GetEnumerator()) {
+        $sec = ConvertTo-SecureString $kv.Value -AsPlainText -Force
+        Set-LocalUser -Name $kv.Key -Password $sec
+        Log "FIX: replaced insecure password on '$($kv.Key)'." "Green"
+    }
+}
+
+# SCRIPT SCOPE: password policy (history / complexity / lockout) - fix + fixall
 function Set-PasswordPolicy {
     Set-LocalPasswordPolicy -HistoryCount $P.PwHistory -ComplexityEnabled $P.PwComplexity
     Set-LocalAccountLockout -Threshold $P.LockoutThreshold
@@ -608,7 +613,7 @@ function Report-Student-UserRights {
     }
 }
 
-# TRAINING ONLY (fixall): the script strips the user rights itself
+# SCRIPT SCOPE: the script strips the user rights (fix + fixall)
 function Fix-UserRights {
     # Build a secedit INF that strips the listed users from each privilege.
     $exp = Join-Path $env:TEMP ("cp_sed_" + [guid]::NewGuid().ToString("N") + ".inf")
@@ -646,17 +651,14 @@ function Fix-UserRights {
 }
 
 function Run-Fix {
-    Log "=== FIX  $($P.Image)  (stage=fix) — SCRIPT SCOPE ONLY ===" "Cyan"
-    Log "script does: security options, firewall, RDP, services, shares, software, backdoors." "White"
-    Log "student does: passwords, users/groups, user-rights (BY HAND — list printed after fixes)." "White"
-    Fix-Policy; Fix-Network; Fix-Services; Fix-Software
-    Log "=== SCRIPT SCOPE FIX COMPLETE ===" "Green"
-    Log "" 
-    Report-Student-Users
+    Log "=== FIX  $($P.Image)  (stage=fix) — SCRIPT SCOPE ===" "Cyan"
+    Log "script does: security options, firewall, RDP, services, shares, software, backdoors," "White"
+    Log "             password policy (history/complexity/lockout), user demotions + groups, user-rights." "White"
+    Log "student does: USER PASSWORDS + ADD/REMOVE USERS (BY HAND — list below) + forensics." "White"
+    Fix-Policy; Fix-Network; Fix-Services; Fix-Software; Set-PasswordPolicy; Fix-UserGroups; Fix-UserRights
+    Log "=== SCRIPT SCOPE FIX COMPLETE — now do the STUDENT HOMEWORK below ===" "Green"
     Log ""
-    Report-Student-PasswordPolicy
-    Log ""
-    Report-Student-UserRights
+    Report-Student-UserAccounts
     Log ""
     Log "WHEN DONE:  re-run  -Stage verify  — every line should be PASS (target ~95+)." "Yellow"
 }
@@ -664,7 +666,7 @@ function Run-Fix {
 # TRAINING ONLY — script does everything, incl. passwords + users (measure full score)
 function Run-FixAll {
     Log "=== FIXALL  $($P.Image)  (stage=fixall) — TRAINING ONLY: script does EVERYTHING ===" "Red"
-    Fix-Users; Set-PasswordPolicy; Fix-Policy; Fix-Network; Fix-Services; Fix-Software; Fix-UserRights
+    Fix-UserAccounts; Fix-UserGroups; Set-PasswordPolicy; Fix-Policy; Fix-Network; Fix-Services; Fix-Software; Fix-UserRights
     Log "=== FIXALL complete. Re-run  -Stage verify  to confirm. ===" "Green"
 }
 
