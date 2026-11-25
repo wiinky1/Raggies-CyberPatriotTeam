@@ -5,7 +5,7 @@
 >
 > If a team number, squadron name, or squadron folder shows up anywhere (file names, commit history, local folders), that's a historical leftover from where the work was originally done. It carries **no meaning, no sponsorship, and no association** with any team or squadron. The scripts stand on their own.
 >
-> **Use them freely** — read them, copy them, modify them, share them, build on them. What you do with them and how you do it is on you.
+> **Use them freely** — read them, copy them, modify them, share them, build on them. What you do with them and how you do it is on you!!!
 
 ## What this is
 
